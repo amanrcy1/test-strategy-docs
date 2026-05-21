@@ -1,0 +1,57 @@
+name: Generate PDF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'strategy/**'
+      - 'artifacts/**'
+      - 'scripts/generate-pdf.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-pdf:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pandoc and LaTeX
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc texlive-xetex texlive-fonts-recommended texlive-plain-generic
+
+      - name: Make script executable
+        run: chmod +x scripts/generate-pdf.sh
+
+      - name: Generate PDF
+        run: ./scripts/generate-pdf.sh
+
+      - name: Verify PDF size
+        run: |
+          FILE_SIZE=$(wc -c < pdf/fintech-test-strategy.pdf | tr -d ' ')
+          MAX_SIZE=$((20 * 1024 * 1024))
+          echo "PDF size: $FILE_SIZE bytes"
+          if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+            echo "::error::PDF exceeds 20MB limit"
+            exit 1
+          fi
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: fintech-test-strategy
+          path: pdf/fintech-test-strategy.pdf
+          retention-days: 90
+
+      - name: Commit PDF to repository
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f pdf/fintech-test-strategy.pdf
+          git diff --cached --quiet || git commit -m "chore: regenerate fintech-test-strategy.pdf"
+          git push
